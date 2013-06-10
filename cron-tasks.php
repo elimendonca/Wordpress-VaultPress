@@ -73,19 +73,20 @@ class VP_Site_Scanner {
 
 	function _scan_site() {
 		if ( !get_option( '_vp_current_scan' ) ) {
-			$paths = array( 'root' => new VP_FileScan( ABSPATH ) );
+			$ignore_symlinks = get_option( '_vp_ignore_symlinks', false );
+			$paths = array( 'root' => new VP_FileScan( ABSPATH, $ignore_symlinks ) );
 
 			// Is WP_CONTENT_DIR inside ABSPATH?
 			if ( is_dir( WP_CONTENT_DIR ) && strpos( realpath( WP_CONTENT_DIR ), realpath( ABSPATH ) . DIRECTORY_SEPARATOR ) !== 0 )
-				$paths['content'] = new VP_FileScan( WP_CONTENT_DIR );
+				$paths['content'] = new VP_FileScan( WP_CONTENT_DIR, $ignore_symlinks );
 
 			// Is WP_PLUGIN_DIR inside ABSPATH or WP_CONTENT_DIR?
 			if ( is_dir( WP_PLUGIN_DIR ) && strpos( realpath( WP_PLUGIN_DIR ), realpath( WP_CONTENT_DIR ) . DIRECTORY_SEPARATOR ) !== 0 && strpos( realpath( WP_PLUGIN_DIR ), realpath( ABSPATH ) . DIRECTORY_SEPARATOR ) !== 0 )
-				$paths['plugins'] = new VP_FileScan( WP_PLUGIN_DIR );
+				$paths['plugins'] = new VP_FileScan( WP_PLUGIN_DIR, $ignore_symlinks );
 
 			// Is WPMU_PLUGIN_DIR inside ABSPATH or WP_CONTENT_DIR?
 			if ( is_dir( WPMU_PLUGIN_DIR ) && strpos( realpath( WPMU_PLUGIN_DIR ), realpath( WP_CONTENT_DIR ) . DIRECTORY_SEPARATOR ) !== 0 && strpos( realpath( WPMU_PLUGIN_DIR ), realpath( ABSPATH ) . DIRECTORY_SEPARATOR ) !== 0 )
-				$paths['mu-plugins'] = new VP_FileScan( WPMU_PLUGIN_DIR );
+				$paths['mu-plugins'] = new VP_FileScan( WPMU_PLUGIN_DIR, $ignore_symlinks );
 
 			update_option( '_vp_current_scan', $paths );
 		}

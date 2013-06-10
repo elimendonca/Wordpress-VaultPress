@@ -3,7 +3,7 @@
  * Plugin Name: VaultPress
  * Plugin URI: http://vaultpress.com/?utm_source=plugin-uri&amp;utm_medium=plugin-description&amp;utm_campaign=1.0
  * Description: Protect your content, themes, plugins, and settings with <strong>realtime backup</strong> and <strong>automated security scanning</strong> from <a href="http://vaultpress.com/?utm_source=wp-admin&amp;utm_medium=plugin-description&amp;utm_campaign=1.0" rel="nofollow">VaultPress</a>. Activate, enter your registration key, and never worry again. <a href="http://vaultpress.com/help/?utm_source=wp-admin&amp;utm_medium=plugin-description&amp;utm_campaign=1.0" rel="nofollow">Need some help?</a>
- * Version: 1.4.2
+ * Version: 1.4.3
  * Author: Automattic
  * Author URI: http://vaultpress.com/?utm_source=author-uri&amp;utm_medium=plugin-description&amp;utm_campaign=1.0
  * License: GPL2+
@@ -17,8 +17,8 @@ if ( !defined( 'ABSPATH' ) )
 
 class VaultPress {
 	var $option_name    = 'vaultpress';
-	var $db_version     = 2;
-	var $plugin_version = '1.4.2';
+	var $db_version     = 3;
+	var $plugin_version = '1.4.3';
 
 	function VaultPress() {
 		$this->__construct();
@@ -112,6 +112,12 @@ class VaultPress {
 		if ( $current_db_version < 2 ) {
 			$this->delete_option( 'timeout' );
 			$this->delete_option( 'disable_firewall' );
+			$this->update_option( 'db_version', $this->db_version );
+			$this->clear_connection();
+		}
+
+		if ( $current_db_version < 3 ) {
+			$this->update_firewall();
 			$this->update_option( 'db_version', $this->db_version );
 			$this->clear_connection();
 		}
@@ -888,14 +894,17 @@ class VaultPress {
 			$this->update_option( 'service_ips', $newval );
 		}
 
-		// update cloudflare IP address list
-		$cf_data = wp_remote_retrieve_body( wp_remote_get( 'https://www.cloudflare.com/ips-v4', $args ) );
-		if ( $cf_data && !empty( $cf_data['body'] ) ) {
-			$this->update_option( 'cloudflare_ips', array(
-				'updated' => time(),
-				'data' => explode( "\n", $cf_data['body'] )
-			) );
+		$external_data = wp_remote_get( "http://$hostname/service-ips-external", $args );
+		if ( $external_data )
+			$external_data = @unserialize( $external_data['body'] );
+
+		if ( $external_data ) {
+			$external_newval = array( 'updated' => time(), 'data' => $external_data );
+			update_option( 'vaultpress_service_ips_external', $external_newval );
 		}
+
+		if ( !empty( $data ) && !empty( $external_data ) )
+			$data = array_merge( $data, $external_data );
 
 		if ( $data ) {
 			return $data;
@@ -1626,6 +1635,9 @@ JS;
 		}
 		if ( !$this->get_option( 'disable_firewall' ) ) {
 			$rxs = $this->get_option( 'service_ips' );
+			$service_ips_external = get_option( 'vaultpress_service_ips_external' );
+			if ( !empty( $rxs['data'] ) && !empty( $service_ips_external['data'] ) )
+				$rxs['data'] = array_merge( $rxs['data'], $service_ips_external['data'] );
 			if ( $rxs ) {
 				$timeout = time() - 86400;
 				if ( $rxs ) {
