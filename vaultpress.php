@@ -3,7 +3,7 @@
  * Plugin Name: VaultPress
  * Plugin URI: http://vaultpress.com/?utm_source=plugin-uri&amp;utm_medium=plugin-description&amp;utm_campaign=1.0
  * Description: Protect your content, themes, plugins, and settings with <strong>realtime backup</strong> and <strong>automated security scanning</strong> from <a href="http://vaultpress.com/?utm_source=wp-admin&amp;utm_medium=plugin-description&amp;utm_campaign=1.0" rel="nofollow">VaultPress</a>. Activate, enter your registration key, and never worry again. <a href="http://vaultpress.com/help/?utm_source=wp-admin&amp;utm_medium=plugin-description&amp;utm_campaign=1.0" rel="nofollow">Need some help?</a>
- * Version: 1.4.3
+ * Version: 1.4.8
  * Author: Automattic
  * Author URI: http://vaultpress.com/?utm_source=author-uri&amp;utm_medium=plugin-description&amp;utm_campaign=1.0
  * License: GPL2+
@@ -18,7 +18,7 @@ if ( !defined( 'ABSPATH' ) )
 class VaultPress {
 	var $option_name    = 'vaultpress';
 	var $db_version     = 3;
-	var $plugin_version = '1.4.3';
+	var $plugin_version = '1.4.8';
 
 	function VaultPress() {
 		$this->__construct();
@@ -57,7 +57,7 @@ class VaultPress {
 		}
 	}
 
-	function &init() {
+	static function &init() {
 		static $instance = false;
 
 		if ( !$instance ) {
@@ -198,32 +198,6 @@ class VaultPress {
 					add_action( $filter, array( $this, 'error_notice' ) );
 			}
 		}
-	?>
-
-		<style type="text/css">
-			#toplevel_page_vaultpress div.wp-menu-image {
-				background: url(<?php echo esc_url( $this->server_url() ); ?>images/vp-icon-sprite.png?20111216) center top no-repeat;
-				background-size: 28px 84px;
-			}
-
-			.admin-color-classic #toplevel_page_vaultpress div.wp-menu-image {
-				background-position: center -28px;
-			}
-
-			#toplevel_page_vaultpress.current div.wp-menu-image,
-			#toplevel_page_vaultpress:hover div.wp-menu-image {
-				background-position: center bottom;
-			}
-
-			@media only screen and (-moz-min-device-pixel-ratio: 1.5), only screen and (-o-min-device-pixel-ratio: 3/2), only screen and (-webkit-min-device-pixel-ratio: 1.5), only screen and (min-device-pixel-ratio: 1.5) {
-				#toplevel_page_vaultpress div.wp-menu-image {
-					background-image: url(<?php echo esc_url( $this->server_url() ); ?>images/vp-icon-sprite-2x.png?20111216);
-				}
-			}
-		</style>
-
-	<?php
-
 	}
 
 	function admin_menu() {
@@ -249,8 +223,10 @@ class VaultPress {
 		if ( !current_user_can( 'manage_options' ) || !is_admin() )
 			return;
 
-		// force the cache to bust every day
-		wp_enqueue_style( 'vaultpress', $this->server_url() . 'css/plugin.css' , false, date( 'Ymd' ) );
+		wp_enqueue_style( 'vaultpress-nav', plugins_url( '/nav-styles.css', __FILE__ ), false, date( 'Ymd' ) );
+
+		if ( isset( $_GET['page'] ) && 'vaultpress' == $_GET['page'] )
+			wp_enqueue_style( 'vaultpress', plugins_url( '/styles.css', __FILE__ ), false, date( 'Ymd' ) );
 	}
 
 	// display a security threat notice if one exists
@@ -540,6 +516,10 @@ class VaultPress {
 				$val = $this->get_option_name_ignore( true );
 				update_option( '_vp_config_option_name_ignore', $val );
 				break;
+			case '_vp_config_post_meta_name_ignore':
+				$val = $this->get_post_meta_name_ignore( true );
+				update_option( '_vp_config_post_meta_name_ignore', $val );
+				break;
 		}
 		return $val;
 	}
@@ -558,6 +538,17 @@ class VaultPress {
 		if ( $return_defaults )
 			return $defaults;
 		$ignore_names = $this->get_config( '_vp_config_option_name_ignore' );
+		return array_unique( array_merge( $defaults, $ignore_names ) );
+	}
+
+	// post meta name patterns to ignore
+	function get_post_meta_name_ignore( $return_defaults = false ) {
+		$defaults = array(
+			'pvc_views'
+		);
+		if ( $return_defaults )
+			return $defaults;
+		$ignore_names = $this->get_config( '_vp_config_post_meta_name_ignore' );
 		return array_unique( array_merge( $defaults, $ignore_names ) );
 	}
 
@@ -710,10 +701,16 @@ class VaultPress {
 
 	// Handle Notifying VaultPress of PostMeta changes via newfangled metadata functions
 	function postmeta_insert_handler( $meta_id, $post_id, $meta_key, $meta_value='' ) {
+		if ( in_array( $meta_key, $this->get_post_meta_name_ignore() ) )
+			return;	
+
 		$this->add_ping( 'db', array( 'postmeta' => $meta_id ) );
 	}
 
 	function postmeta_modification_handler( $meta_id, $object_id, $meta_key, $meta_value ) {
+		if ( in_array( $meta_key, $this->get_post_meta_name_ignore() ) )
+			return;	
+
 		if ( !is_array( $meta_id ) )
 			return $this->add_ping( 'db', array( 'postmeta' => $meta_id ) );
 		foreach ( $meta_id as $id ) {
@@ -722,7 +719,10 @@ class VaultPress {
 	}
 
 	// Handle Notifying VaultPress of PostMeta changes via old school cherypicked hooks
-	function postmeta_action_handler( $meta_id ) {
+	function postmeta_action_handler( $meta_id, $post_id = null, $meta_key = null ) {
+		if ( in_array( $meta_key, $this->get_post_meta_name_ignore() ) )
+			return;
+	
 		if ( !is_array($meta_id) )
 			return $this->add_ping( 'db', array( 'postmeta' => $meta_id ) );
 		foreach ( $meta_id as $id )
@@ -881,23 +881,54 @@ class VaultPress {
 		) );
 	}
 
-	function update_firewall() {
-		$args     = array( 'timeout' => $this->get_option( 'timeout' ) );
+	function request_firewall_update( $external_services = false ) {
+		$args     = array( 'timeout' => $this->get_option( 'timeout' ), 'sslverify' => true );
 		$hostname = $this->get_option( 'hostname' );
-		$data     = wp_remote_get( "http://$hostname/service-ips", $args );
+		$path = $external_services ? 'service-ips-external' : 'service-ips';
 
-		if ( $data )
-			$data = @unserialize( $data['body'] );
+		$data = false;
+		$https_error = null;
+		$retry = 2;
+		do {
+			$retry--;
+			$protocol = 'http'; 
+			$args['sslverify'] = 'https' == $protocol ? true : false;
+			$r = wp_remote_get( $url=sprintf( "%s://%s/%s", $protocol, $hostname, $path ), $args );
+			if ( 200 == wp_remote_retrieve_response_code( $r ) ) {
+				if ( 99 == $this->get_option( 'connection_error_code' ) )
+					$this->clear_connection();
+				$data = @unserialize( wp_remote_retrieve_body( $r ) );
+				break;
+			}
+			if ( 'https' == $protocol )
+				$https_error = $r;
+			usleep( 100 );
+		} while( $retry > 0 );
 
+		$r_code = wp_remote_retrieve_response_code( $https_error );
+		if ( 0 == $retry && 200 != $r_code ) {
+			$error_message = sprintf( 'Unexpected HTTP response code %s', $r_code );
+			if ( false === $r_code )
+				$error_message = 'Unable to find an HTTP transport that supports SSL verification';
+			elseif ( is_wp_error( $https_error ) )
+				$error_message = $https_error->get_error_message();
+			
+			$this->update_option( 'connection', time() );
+			$this->update_option( 'connection_error_code', 99 );
+			$this->update_option( 'connection_error_message', sprintf( __('Warning: The VaultPress plugin is using an insecure protocol because it cannot verify the identity of the VaultPress server. Please contact your hosting provider, and ask them to check that SSL certificate verification is correctly configured on this server. The request failed with the following error: "%s". If you&rsquo;re still having issues please <a href="%1$s">contact the VaultPress&nbsp;Safekeepers</a>.', 'vaultpress' ), esc_html( $error_message ), 'http://vaultpress.com/contact/' ) );
+		}
+
+		return $data;
+	}
+
+	function update_firewall() {
+		$data = $this->request_firewall_update();
 		if ( $data ) {
 			$newval = array( 'updated' => time(), 'data' => $data );
 			$this->update_option( 'service_ips', $newval );
 		}
 
-		$external_data = wp_remote_get( "http://$hostname/service-ips-external", $args );
-		if ( $external_data )
-			$external_data = @unserialize( $external_data['body'] );
-
+		$external_data = $this->request_firewall_update( true );
 		if ( $external_data ) {
 			$external_newval = array( 'updated' => time(), 'data' => $external_data );
 			update_option( 'vaultpress_service_ips_external', $external_newval );
@@ -1621,9 +1652,14 @@ JS;
 
 	function validate_api_signature() {
 		global $__vp_validate_error;
-		if ( !empty( $_POST['signature'] ) )
-			$sig = (string) $_POST['signature'];
-		else {
+		if ( !empty( $_POST['signature'] ) ) {
+			if ( is_string( $_POST['signature'] ) ) {
+				$sig = $_POST['signature'];
+			} else {
+				$__vp_validate_error = array( 'error' => 'invalid_signature_format' );
+				return false;
+			}
+		} else {
 			$__vp_validate_error = array( 'error' => 'no_signature' );
 			return false;
 		}
@@ -2044,9 +2080,9 @@ JS;
 		add_action( 'updated_post_meta', array( $this, 'postmeta_modification_handler' ), 10, 4 );
 		add_action( 'delete_post_meta',  array( $this, 'postmeta_modification_handler' ), 10, 4 );
 		add_action( 'deleted_post_meta', array( $this, 'postmeta_modification_handler' ), 10, 4 );
-		add_action( 'added_postmeta',    array( $this, 'postmeta_action_handler' ) );
-		add_action( 'update_postmeta',   array( $this, 'postmeta_action_handler' ) );
-		add_action( 'delete_postmeta',   array( $this, 'postmeta_action_handler' ) );
+		add_action( 'added_postmeta',    array( $this, 'postmeta_action_handler' ), 10, 3 );
+		add_action( 'update_postmeta',   array( $this, 'postmeta_action_handler' ), 10, 3 );
+		add_action( 'delete_postmeta',   array( $this, 'postmeta_action_handler' ), 10, 3 );
 
 		// Links
 		add_action( 'edit_link',   array( $this, 'link_action_handler' ) );

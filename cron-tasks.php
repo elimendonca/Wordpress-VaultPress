@@ -143,7 +143,7 @@ class VP_Site_Scanner {
 		}
 	}
 
-	function &init() {
+	static function &init() {
 		static $instance = false;
 		if ( !$instance )
 			$instance = new VP_Site_Scanner();
