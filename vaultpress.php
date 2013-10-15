@@ -3,7 +3,7 @@
  * Plugin Name: VaultPress
  * Plugin URI: http://vaultpress.com/?utm_source=plugin-uri&amp;utm_medium=plugin-description&amp;utm_campaign=1.0
  * Description: Protect your content, themes, plugins, and settings with <strong>realtime backup</strong> and <strong>automated security scanning</strong> from <a href="http://vaultpress.com/?utm_source=wp-admin&amp;utm_medium=plugin-description&amp;utm_campaign=1.0" rel="nofollow">VaultPress</a>. Activate, enter your registration key, and never worry again. <a href="http://vaultpress.com/help/?utm_source=wp-admin&amp;utm_medium=plugin-description&amp;utm_campaign=1.0" rel="nofollow">Need some help?</a>
- * Version: 1.4.8
+ * Version: 1.4.9
  * Author: Automattic
  * Author URI: http://vaultpress.com/?utm_source=author-uri&amp;utm_medium=plugin-description&amp;utm_campaign=1.0
  * License: GPL2+
@@ -18,11 +18,7 @@ if ( !defined( 'ABSPATH' ) )
 class VaultPress {
 	var $option_name    = 'vaultpress';
 	var $db_version     = 3;
-	var $plugin_version = '1.4.8';
-
-	function VaultPress() {
-		$this->__construct();
-	}
+	var $plugin_version = '1.4.9';
 
 	function __construct() {
 		register_activation_hook( __FILE__, array( $this, 'activate' ) );
@@ -731,8 +727,7 @@ class VaultPress {
 
 	function verify_table( $table ) {
 		global $wpdb;
-		$table = $wpdb->escape( $table );
-		$status = $wpdb->get_row( "SHOW TABLE STATUS WHERE Name = '$table'" );
+		$status = $wpdb->get_row( $wpdb->prepare( "SHOW TABLE STATUS WHERE Name = %s", $table ) );
 		if ( !$status || !$status->Update_time || !$status->Comment || $status->Engine != 'MyISAM' )
 			return true;
 		if ( preg_match( '/([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})/', $status->Comment, $m ) )
@@ -1712,7 +1707,7 @@ JS;
 		if ( $sig[0] === $signature )
 			return true;
 
-		$__vp_validate_error = array( 'error' => 'invalid_signed_data', 'detail' => array( 'actual' => $sig[0], 'needed' => $signature ) );
+		$__vp_validate_error = array( 'error' => 'invalid_signed_data' );
 		return false;
 	}
 
@@ -1863,7 +1858,8 @@ JS;
 				}
 				return;
 			case 'db':
-				$subtype = array_shift( array_keys( $data ) );
+				$_keys = array_keys( $data );
+				$subtype = array_shift( $_keys );
 				if ( !isset( $vaultpress_pings[$type][$subtype] ) )
 					$vaultpress_pings[$type][$subtype] = array();
 				if ( in_array( $data, $vaultpress_pings[$type][$subtype] ) )
