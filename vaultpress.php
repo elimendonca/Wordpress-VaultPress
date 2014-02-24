@@ -3,7 +3,7 @@
  * Plugin Name: VaultPress
  * Plugin URI: http://vaultpress.com/?utm_source=plugin-uri&amp;utm_medium=plugin-description&amp;utm_campaign=1.0
  * Description: Protect your content, themes, plugins, and settings with <strong>realtime backup</strong> and <strong>automated security scanning</strong> from <a href="http://vaultpress.com/?utm_source=wp-admin&amp;utm_medium=plugin-description&amp;utm_campaign=1.0" rel="nofollow">VaultPress</a>. Activate, enter your registration key, and never worry again. <a href="http://vaultpress.com/help/?utm_source=wp-admin&amp;utm_medium=plugin-description&amp;utm_campaign=1.0" rel="nofollow">Need some help?</a>
- * Version: 1.4.9
+ * Version: 1.5.3
  * Author: Automattic
  * Author URI: http://vaultpress.com/?utm_source=author-uri&amp;utm_medium=plugin-description&amp;utm_campaign=1.0
  * License: GPL2+
@@ -18,7 +18,7 @@ if ( !defined( 'ABSPATH' ) )
 class VaultPress {
 	var $option_name    = 'vaultpress';
 	var $db_version     = 3;
-	var $plugin_version = '1.4.9';
+	var $plugin_version = '1.5.3';
 
 	function __construct() {
 		register_activation_hook( __FILE__, array( $this, 'activate' ) );
@@ -327,7 +327,8 @@ class VaultPress {
 		if ( !isset( $_GET['page'] ) || 'vaultpress' != $_GET['page'] )
 			$error_message .= ' ' . sprintf( '<a href="%s">%s</a>', admin_url( 'admin.php?page=vaultpress' ), __( 'Visit&nbsp;the&nbsp;VaultPress&nbsp;page' , 'vaultpress') );
 
-		if ( !empty( $error_message ) )
+		$screen = get_current_screen();
+		if ( !in_array( $screen->id, array( 'about', 'about-user', 'about-network' ) ) && !empty( $error_message ) )
 			$this->ui_message( $error_message, 'error' );
 	}
 
@@ -516,6 +517,10 @@ class VaultPress {
 				$val = $this->get_post_meta_name_ignore( true );
 				update_option( '_vp_config_post_meta_name_ignore', $val );
 				break;
+			case '_vp_config_should_ignore_files':
+				$val = $this->get_should_ignore_files( true );
+				update_option( '_vp_config_should_ignore_files', $val );
+				break;
 		}
 		return $val;
 	}
@@ -545,6 +550,48 @@ class VaultPress {
 		if ( $return_defaults )
 			return $defaults;
 		$ignore_names = $this->get_config( '_vp_config_post_meta_name_ignore' );
+		return array_unique( array_merge( $defaults, $ignore_names ) );
+	}
+
+	// file name patterns to ignore
+	function get_should_ignore_files( $return_defaults = false ) {
+		$defaults = array(
+			'@.*/404\.log\.txt$@',
+			'@.*/\.DS_Store$@',
+			'@.*/debug\.log$@',
+			'@.*\.timthumb\.txt$@',
+			'@.*timthumb[A-Za-z0-9]*$@',
+			'@.*wp-content/contents/cache/@',
+			'@.*wp-content/content/cache/@',
+			'@.*wp-content/cache/@',
+			'@.*wp-content/old-cache/@',
+			'@.*wp-content/w3tc/@',
+			'@.*owa/owa-data/caches/@',
+			'@.*gt-cache@',
+			'@.*/wpclicks/tracker/cache/@',
+			'@/wp-content/[^/]+cache.*/@',
+			'@(?<!plugins)\/cache@',
+			'@.*amember/data/new_rewrite@',
+			'@.*sucuri/blocks/@',
+			'@.*/_sucuribackup.*@',
+			'@.*sess_[0-9a-zA-Z]{32,}@',
+			'@.*wp-content/backups.*@',
+			'@.*wp-content/backupwordpress@',
+			'@.*wp-content/backup-[0-9a-zA-Z]+@',
+			'@.*wp-content/[0-9a-zA-Z]+-backups@',
+			'@.*mwp_backups/@',
+			'@.*managewp/backups/@',
+			'@.*wp-snapshots/@',
+			'@.*error_log.*@',
+			'@.*/error-log.*@',
+			'@.*/error\.log$@',
+			'@.*/captcha/tmp.*@',
+			'@.*\.mt_backup_[0-9a-z:_]*$@i',
+			'@.*vp-uploaded-restore-.*@',
+		);
+		if ( $return_defaults )
+			return $defaults;
+		$ignore_names = (array) $this->get_config( '_vp_config_should_ignore_files' );
 		return array_unique( array_merge( $defaults, $ignore_names ) );
 	}
 
@@ -1533,6 +1580,11 @@ JS;
 				else
 					$recursive = false;
 
+				if ( isset( $_POST['full_list'] ) )
+					$full_list = (bool)$_POST['full_list'];
+				else
+					$full_list = false;
+
 				switch ( array_pop( explode( ':', $_GET['action'] ) ) ) {
 					default:
 						die( "naughty naughty" );
@@ -1546,7 +1598,7 @@ JS;
 					case 'get':
 						$bfs->fdump( $bfs->dir.$path );
 					case 'ls':
-						$this->response( $bfs->ls( $path, $md5, $sha1, $limit, $offset ) );
+						$this->response( $bfs->ls( $path, $md5, $sha1, $limit, $offset, $full_list ) );
 				}
 				break;
 			case 'config:get':
